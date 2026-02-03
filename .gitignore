@@ -1,0 +1,15 @@
+# Virtual environments
+venv/
+env/
+.venv/
+Backend/venv/
+
+# Build directories
+**/Builds/
+**/build/
+*.a
+*.dylib
+
+# Python cache
+__pycache__/
+*.pyc
