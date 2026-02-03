@@ -1,0 +1,5 @@
+librosa
+laion_clap
+fastapi
+pydantic
+sqlite3
