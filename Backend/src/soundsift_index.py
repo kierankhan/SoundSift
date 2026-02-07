@@ -329,7 +329,6 @@ class SoundSiftIndex:
 
         # 2. Similarity against audio
         audio_sims = cosine_similarity_matrix(q_emb, self.embeddings)
-        print('asims', audio_sims)
 
         # 3. Similarity against text-derived embeddings
         # text_sims = cosine_similarity_matrix(q_emb, self.text_embeddings)
@@ -343,7 +342,6 @@ class SoundSiftIndex:
 
         # 5. Rank
         idxs = np.argsort(-sims)[:top_k]
-        print(idxs)
 
         return [
             {

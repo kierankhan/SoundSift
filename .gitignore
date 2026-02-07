@@ -13,3 +13,7 @@ Backend/venv/
 # Python cache
 __pycache__/
 *.pyc
+
+Backend/data
+*.db
+*.DS_Store
