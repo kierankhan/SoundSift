@@ -16,7 +16,7 @@ class Query(BaseModel):
 @app.post("/index/folder")
 async def index(sample_folder: SampleFolder):
     try:
-        changed = Index.index_folder2(sample_folder.file_path)
+        changed = Index.index_folder(sample_folder.file_path)
         Index.loaded = False
         return {'status': 'ok', 'files_embedded': changed}
     except:

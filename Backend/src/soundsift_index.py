@@ -107,56 +107,9 @@ class SoundSiftIndex:
             shape=(n_rows, EMBED_DIM)
         )
 
-    # Not needed in new arch
-    def ensure_loaded(self):
-        if not self.loaded:
-            self.load_embeddings()
-            self.load_text_embeddings()
-            self.loaded = True
-
     # ---------- INDEXING ----------
-
-    def index_file(self, path: str, max_seconds: float = 10.0) -> bool:
-        stat = os.stat(path)
-        mtime = stat.st_mtime
-
-        existing = get_sample_by_path(path)
-        if existing and existing[1] == mtime:
-            self.index_text(sample_id, path)
-            return False  # unchanged
-
-        audio = load_audio_mono(path, max_seconds)
-        duration = len(audio) / SAMPLE_RATE
-        audio = audio.reshape(1, -1)
-
-        emb = self.model.get_audio_embedding_from_data(
-            x=audio,
-            use_tensor=False
-        )[0]
-        print(emb.shape)
-
-        sample_id = upsert_sample(path, mtime, duration)
-        store_embedding(sample_id, MODEL_VERSION, emb)
-
-        self.index_text(sample_id, path)
-
-        return True
-
-    def index_folder(self, folder: str):
-        files = find_audio_files(folder)
-        embedded = 0
-
-        for path in files:
-            try:
-                if self.index_file(path):
-                    embedded += 1
-            except Exception as e:
-                print(f"Failed {path}: {e}")
-
-        print(f"Embedded {embedded} new/changed files")
-        return embedded
     
-    def index_folder2(self, folder: str):
+    def index_folder(self, folder: str):
         dtype = np.float32
         itemsize = 4 * EMBED_DIM
 
@@ -252,61 +205,6 @@ class SoundSiftIndex:
         emb = self.model.get_text_embedding([text])[0]
         store_text_embedding(sample_id, MODEL_VERSION, emb)
 
-    # ---------- LOAD FOR SEARCH ----------
-
-    def load_embeddings(self):
-        conn = get_connection()
-        cur = conn.cursor()
-
-        cur.execute("""
-        SELECT samples.path, embeddings.vector
-        FROM embeddings
-        JOIN samples ON samples.id = embeddings.sample_id
-        WHERE embeddings.model_version = ?
-        """, (MODEL_VERSION,))
-
-        paths = []
-        vectors = []
-
-        for path, blob in cur.fetchall():
-            paths.append(path)
-            vectors.append(blob_to_np(blob, EMBED_DIM))
-        conn.close()
-
-        # print(paths, vectors)
-        if vectors:
-            self.paths = paths
-            self.embeddings = np.vstack(vectors)
-        else:
-            self.paths = []
-            self.embeddings = None
-
-    def load_text_embeddings(self):
-        conn = get_connection()
-        cur = conn.cursor()
-
-        cur.execute("""
-        SELECT samples.path, text_embeddings.vector
-        FROM text_embeddings
-        JOIN samples ON samples.id = text_embeddings.sample_id
-        WHERE text_embeddings.model_version = ?
-        """, (MODEL_VERSION,))
-
-        paths = []
-        vectors = []
-
-        for path, blob in cur.fetchall():
-            paths.append(path)
-            vectors.append(blob_to_np(blob, EMBED_DIM))
-
-        conn.close()
-
-        if vectors:
-            self.text_paths = paths
-            self.text_embeddings = np.vstack(vectors)
-        else:
-            self.text_paths = []
-            self.text_embeddings = None
 
     # ---------- QUERY ----------
 
@@ -314,8 +212,6 @@ class SoundSiftIndex:
         self,
         text: str,
         top_k: int = 10,
-        audio_weight: float = 1,
-        text_weight: float = 0.3,
     ):
         
         self.load()
@@ -325,29 +221,16 @@ class SoundSiftIndex:
         
         # 1. Embed query text
         q_emb = self.model.get_text_embedding([text])[0]
-        # print("q", q_emb)
 
         # 2. Similarity against audio
         audio_sims = cosine_similarity_matrix(q_emb, self.embeddings)
 
-        # 3. Similarity against text-derived embeddings
-        # text_sims = cosine_similarity_matrix(q_emb, self.text_embeddings)
-
-        # 4. Combine
-        sims = (
-            audio_weight * audio_sims
-        )
-
-        # print(sims)
-
         # 5. Rank
-        idxs = np.argsort(-sims)[:top_k]
+        idxs = np.argsort(-audio_sims)[:top_k]
 
         return [
             {
-                "score": float(sims[i]),
-                "audio_score": float(audio_sims[i]),
-                # "text_score": float(text_sims[i]),
+                "score": float(audio_sims[i]),
                 "path": get_sample_by_index(i),
             }
             for i in idxs
