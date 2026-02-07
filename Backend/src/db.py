@@ -17,30 +17,32 @@ def init_db():
     CREATE TABLE IF NOT EXISTS samples (
         id INTEGER PRIMARY KEY,
         path TEXT UNIQUE,
+        vec_index INTEGER,
         mtime REAL,
         duration REAL
     )
     """)
 
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS embeddings (
-        sample_id INTEGER,
-        model_version TEXT,
-        vector BLOB,
-        FOREIGN KEY(sample_id) REFERENCES samples(id),
-        UNIQUE(sample_id, model_version)
-    )
-    """)
+    # cur.execute("""
+    # CREATE TABLE IF NOT EXISTS embeddings (
+    #     sample_id INTEGER,
+    #     model_version TEXT,
+    #     vector BLOB,
+    #     FOREIGN KEY(sample_id) REFERENCES samples(id),
+    #     UNIQUE(sample_id, model_version)
+    # )
+    # """)
 
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS text_embeddings (
-        sample_id INTEGER,
-        model_version TEXT,
-        vector BLOB,
-        FOREIGN KEY(sample_id) REFERENCES samples(id),
-        UNIQUE(sample_id, model_version)
-    );
-    """)
+    # TODO: Figure out how to do text embeddings in new arch
+    # cur.execute("""
+    # CREATE TABLE IF NOT EXISTS text_embeddings (
+    #     sample_id INTEGER,
+    #     model_version TEXT,
+    #     vector BLOB,
+    #     FOREIGN KEY(sample_id) REFERENCES samples(id),
+    #     UNIQUE(sample_id, model_version)
+    # );
+    # """)
 
     conn.commit()
     conn.close()
@@ -62,6 +64,38 @@ def get_sample_by_path(path: str):
     row = cur.fetchone()
     conn.close()
     return row
+
+def get_sample_by_index(idx: int):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, path FROM samples WHERE vec_index = ?",
+        (int(idx),)
+    )
+    row = cur.fetchone()
+    conn.close()
+    return row[1] if row else None
+
+def insert_sample(path: str, index: int, mtime: float, duration: float) -> bool:
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+        INSERT INTO samples (path, vec_index, mtime, duration)
+        VALUES (?, ?, ?, ?)
+        """, (path, index, mtime, duration))
+
+        conn.commit()
+        return True
+    except:
+        print("failed to insert")
+        return False
+    # cur.execute("SELECT id FROM samples WHERE path = ?", (path,))
+    # sample_id = cur.fetchone()[0]
+    # conn.close()
+
+    # return sample_id
 
 def upsert_sample(path: str, mtime: float, duration: float) -> int:
     conn = get_connection()
